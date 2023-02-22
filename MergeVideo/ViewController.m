@@ -28,37 +28,31 @@
         config.preferredAssetRepresentationMode = PHPickerConfigurationAssetRepresentationModeAutomatic;
         PHPickerViewController *pvc = [[PHPickerViewController alloc] initWithConfiguration:config];
         pvc.delegate = self;
-        //        pvc.modalPresentationStyle = UIModalPresentationFullScreen;
         [self presentViewController:pvc animated:YES completion:^{
 
         }];
-        //        [self.navigationController pushViewController:pvc animated:YES];
     }
-    //    NSURL *url1 = [NSBundle.mainBundle URLForResource:@"22849_1676808731" withExtension:@"mp4"];
-    //    NSURL *url2 = [NSBundle.mainBundle URLForResource:@"22850_1676808776" withExtension:@"mp4"];
-    //    [self mergeVideoToOneVideo:@[url1, url2] toStorePath:@"join" WithStoreName:@"merge5" andIf3D:NO success:^{
-    //
-    //    } failure:^{
-    //
-    //    }];
-    //    [[UIImage imageNamed:@"启动图-苹果-背景"] saveToURL:[NSURL fileURLWithPath:@"/Users/sunyanguo/Developer/tinified-4/logoaaa@3x.jpg"] type:NYXImageTypeJPEG backgroundFillColor:UIColor.systemPinkColor];
 }
 
 - (void)picker:(PHPickerViewController *)picker didFinishPicking:(NSArray<PHPickerResult *> *)results {
-    //    [self.navigationController popViewControllerAnimated:YES];
     [picker dismissViewControllerAnimated:YES completion:^{
         [self.mp4Array removeAllObjects];
-        for (__unused PHPickerResult *item in results) {
+        // 由于后面获取视频是异步操作，为了判断是否全部获取，先全部用null 对象填充，再判断是否包含null。
+        [results enumerateObjectsUsingBlock:^(PHPickerResult * _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
             [self.mp4Array addObject:[NSNull null]];
-        }
+        }];
 
         [results enumerateObjectsUsingBlock:^(PHPickerResult * _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
+            // Your program should copy or move the file within the completion handler.
+            // 需要在block内copy或者move文件 因为block执行后文件会被删除
             [obj.itemProvider loadFileRepresentationForTypeIdentifier:UTTypeMovie.identifier completionHandler:^(NSURL * _Nullable item, NSError * _Nullable error) {
-                NSData *save1 =  [NSData dataWithContentsOfURL:item];
-                NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
-                NSString *documentPath = [paths objectAtIndex:0];
-                NSURL *wurl = [NSURL fileURLWithPath:[documentPath stringByAppendingPathComponent:[NSString stringWithFormat:@"aaa%@.mp4", @(idx)]]];
-                [save1 writeToURL:wurl atomically:YES];
+
+                NSFileManager *fileManager = [NSFileManager defaultManager];
+                NSError *err = nil;
+                NSURL *docUrl = [fileManager URLForDirectory:NSDocumentDirectory inDomain:NSUserDomainMask appropriateForURL:nil create:YES error:&err];
+                NSURL *wurl = [docUrl URLByAppendingPathComponent:[NSString stringWithFormat:@"%@.mp4", @(idx)]];
+                [fileManager copyItemAtURL:item toURL:wurl error:&err];
+
                 [self.mp4Array replaceObjectAtIndex:idx withObject:wurl];
                 BOOL hasNull = NO;
                 // 检查是否存在 null
@@ -68,11 +62,12 @@
                     }
                 }
 
-                NSLog(@"fff");
+                NSLog(@"等待合并");
                 if (!hasNull) {
                     // 都取到了，就合并
+                    NSLog(@"开始合并");
                     dispatch_async(dispatch_get_main_queue(), ^{
-                        [self mergeVideoToOneVideo:self.mp4Array toStorePath:@"join" WithStoreName:@"merge6" andIf3D:NO success:^{
+                        [self mergeVideoToOneVideo:self.mp4Array toStorePath:@"join" WithStoreName:@"merge6" success:^{
 
                         } failure:^{
 
@@ -94,15 +89,14 @@
  *  @param tArray       视频文件NSURL地址
  *  @param storePath    沙盒目录下的文件夹
  *  @param storeName    合成的文件名字
- *  @param tbool        是否3D视频,YES表示是3D视频
  *  @param successBlock 成功block
  *  @param failureBlcok 失败block
  */
--(void)mergeVideoToOneVideo:(NSArray *)tArray toStorePath:(NSString *)storePath WithStoreName:(NSString *)storeName andIf3D:(BOOL)tbool success:(void (^)(void))successBlock failure:(void (^)(void))failureBlcok
+-(void)mergeVideoToOneVideo:(NSArray *)tArray toStorePath:(NSString *)storePath WithStoreName:(NSString *)storeName success:(void (^)(void))successBlock failure:(void (^)(void))failureBlcok
 {
     AVMutableComposition *mixComposition = [self mergeVideostoOnevideo:tArray];
-    NSURL *outputFileUrl = [self joinStorePaht:storePath togetherStoreName:storeName];
-    [self storeAVMutableComposition:mixComposition withStoreUrl:outputFileUrl andVideoUrl:[tArray objectAtIndex:0] WihtName:storeName andIf3D:tbool success:successBlock failure:failureBlcok];
+    NSURL *outputFileUrl = [self joinStorePath:storePath togetherStoreName:storeName];
+    [self storeAVMutableComposition:mixComposition withStoreUrl:outputFileUrl andVideoUrl:[tArray objectAtIndex:0] withName:storeName success:successBlock failure:failureBlcok];
 }
 /**
  *  多个视频合成为一个
@@ -114,22 +108,21 @@
 -(AVMutableComposition *)mergeVideostoOnevideo:(NSArray*)array
 {
     AVMutableComposition* mixComposition = [AVMutableComposition composition];
-    AVMutableCompositionTrack *a_compositionVideoTrack = [mixComposition addMutableTrackWithMediaType:AVMediaTypeVideo preferredTrackID:kCMPersistentTrackID_Invalid];
-    AVMutableCompositionTrack *audioCompositionTrack = [mixComposition addMutableTrackWithMediaType:AVMediaTypeAudio preferredTrackID:kCMPersistentTrackID_Invalid];
+    AVMutableCompositionTrack *compositionVideoTrack = [mixComposition addMutableTrackWithMediaType:AVMediaTypeVideo preferredTrackID:kCMPersistentTrackID_Invalid];
+    AVMutableCompositionTrack *compositionAudioTrack = [mixComposition addMutableTrackWithMediaType:AVMediaTypeAudio preferredTrackID:kCMPersistentTrackID_Invalid];
     Float64 tmpDuration = 0.0;
 
 
-    for (NSInteger i=0; i<array.count; i++)
-    {
+    for (NSInteger i=0; i<array.count; i++) {
 
-        AVURLAsset *videoAsset = [[AVURLAsset alloc]initWithURL:array[i] options:nil];
-        CMTimeRange video_timeRange = CMTimeRangeMake(kCMTimeZero,videoAsset.duration);
+        AVURLAsset *videoAsset = [[AVURLAsset alloc] initWithURL:array[i] options:nil];
+        CMTimeRange video_timeRange = CMTimeRangeMake(kCMTimeZero, videoAsset.duration);
 
         //素材的音频轨
         NSArray<AVAssetTrack *> *tt = [videoAsset tracksWithMediaType:AVMediaTypeAudio];
         AVAssetTrack *audioAssertTrack = tt.firstObject;
         if (audioAssertTrack) {
-            [audioCompositionTrack insertTimeRange:video_timeRange ofTrack:audioAssertTrack atTime:CMTimeMakeWithSeconds(tmpDuration, 0) error:nil];
+            [compositionAudioTrack insertTimeRange:video_timeRange ofTrack:audioAssertTrack atTime:CMTimeMakeWithSeconds(tmpDuration, 0) error:nil];
         }
         /**
          *  依次加入每个asset
@@ -144,7 +137,7 @@
         NSArray<AVAssetTrack *> *ttvideos = [videoAsset tracksWithMediaType:AVMediaTypeVideo];
         AVAssetTrack *videoTrack = ttvideos.firstObject;
         if (videoTrack) {
-            __unused BOOL succcess = [a_compositionVideoTrack insertTimeRange:video_timeRange ofTrack:videoTrack atTime:CMTimeMakeWithSeconds(tmpDuration, 0) error:&error];
+            __unused BOOL succcess = [compositionVideoTrack insertTimeRange:video_timeRange ofTrack:videoTrack atTime:CMTimeMakeWithSeconds(tmpDuration, 0) error:&error];
         }
 
         tmpDuration += CMTimeGetSeconds(videoAsset.duration);
@@ -160,7 +153,7 @@
  *
  *  @return 返回拼接好的url地址
  */
--(NSURL *)joinStorePaht:(NSString *)sPath togetherStoreName:(NSString *)sName
+-(NSURL *)joinStorePath:(NSString *)sPath togetherStoreName:(NSString *)sName
 {
     NSArray *paths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
     NSString *documentPath = [paths objectAtIndex:0];
@@ -184,12 +177,25 @@
  *  @param successBlock   successBlock
  *  @param failureBlcok   failureBlcok
  */
--(void)storeAVMutableComposition:(AVMutableComposition*)mixComposition withStoreUrl:(NSURL *)storeUrl andVideoUrl:(NSURL *)videoUrl WihtName:(NSString *)aName andIf3D:(BOOL)tbool success:(void (^)(void))successBlock failure:(void (^)(void))failureBlcok
+-(void)storeAVMutableComposition:(AVMutableComposition*)mixComposition
+                    withStoreUrl:(NSURL *)storeUrl
+                     andVideoUrl:(NSURL *)videoUrl
+                        withName:(NSString *)aName
+                         success:(void (^)(void))successBlock
+                         failure:(void (^)(void))failureBlcok
 {
     AVAssetExportSession* _assetExport = [[AVAssetExportSession alloc] initWithAsset:mixComposition presetName:AVAssetExportPresetHighestQuality];
-    //    _assetExport.outputFileType = @"com.apple.quicktime-movie";
+    NSLog(@"%@", [_assetExport supportedFileTypes]);
+    /*
+     (
+     "com.apple.quicktime-movie",
+     "public.mpeg-4",
+     "com.apple.m4v-video"
+     )
+     */
+        _assetExport.outputFileType = @"com.apple.quicktime-movie";
     //    _assetExport.outputFileType = @"public.mpeg-4";
-    _assetExport.outputFileType = UTTypeMovie.identifier;
+    //    _assetExport.outputFileType = UTTypeVideo.identifier; 不能用
     _assetExport.outputURL = storeUrl;
     [_assetExport exportAsynchronouslyWithCompletionHandler:^{
         dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{

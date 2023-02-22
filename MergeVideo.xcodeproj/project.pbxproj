@@ -315,6 +315,7 @@
 				DEVELOPMENT_TEAM = KB7B8SQENU;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = MergeVideo/Info.plist;
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "想要保存视频到相册";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UIMainStoryboardFile = Main;
@@ -342,6 +343,7 @@
 				DEVELOPMENT_TEAM = KB7B8SQENU;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = MergeVideo/Info.plist;
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "想要保存视频到相册";
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UIMainStoryboardFile = Main;
