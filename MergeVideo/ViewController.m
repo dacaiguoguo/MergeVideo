@@ -14,6 +14,7 @@
 @interface ViewController ()<PHPickerViewControllerDelegate, UITableViewDelegate, UITableViewDataSource>
 @property (nonatomic, strong) NSMutableArray *mp4Array;
 @property (nonatomic, strong) UITableView *tableView;
+@property (nonatomic, strong) UIActivityIndicatorView *loadingView;
 @end
 
 @implementation ViewController
@@ -44,7 +45,7 @@
         UIProgressView *pview = [[UIProgressView alloc] initWithProgressViewStyle:UIProgressViewStyleDefault];
         [cell.contentView addSubview:pview];
         pview.tag = 102;
-        pview.frame = CGRectMake(0, 0, self.view.bounds.size.width, 10);
+        pview.frame = CGRectMake(0, 40, self.view.bounds.size.width, 10);
     }
     NSURL *obj = self.mp4Array[indexPath.row];
     cell.textLabel.text = obj.description;
@@ -54,7 +55,7 @@
     }
     if ([obj isKindOfClass:NSURL.class]){
         pview.observedProgress = nil;
-        [pview setProgress:0.0 animated:NO];
+        [pview setProgress:1.0 animated:NO];
         cell.textLabel.text = obj.path.lastPathComponent;
     }
     return cell;
@@ -69,6 +70,9 @@
     self.mp4Array = [NSMutableArray array];
     [self.view addSubview:self.tableView];
     _tableView.frame = self.view.bounds;
+    self.loadingView = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:(UIActivityIndicatorViewStyleLarge)];
+    [self.view addSubview:self.loadingView];
+    _loadingView.center = self.view.center;
     NSLog(@"%@", NSHomeDirectory());
     if (@available(iOS 14, *)) {
         PHPickerConfiguration *config = [[PHPickerConfiguration alloc] init];
@@ -87,9 +91,7 @@
     [picker dismissViewControllerAnimated:YES completion:^{
         [self.mp4Array removeAllObjects];
         // 由于后面获取视频是异步操作，为了判断是否全部获取，先全部用null 对象填充，再判断是否包含null。
-        [results enumerateObjectsUsingBlock:^(PHPickerResult * _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
-            [self.mp4Array addObject:[NSNull null]];
-        }];
+        self.mp4Array = results.mutableCopy;
         [self.tableView reloadData];
         [results enumerateObjectsUsingBlock:^(PHPickerResult * _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
             // Your program should copy or move the file within the completion handler.
@@ -130,11 +132,13 @@
 }
 
 - (void)mergeAndShare {
+    [self.loadingView startAnimating];
     NSFileManager *fileManager = [NSFileManager defaultManager];
     NSError *err = nil;
     NSURL *docUrl = [fileManager URLForDirectory:NSDocumentDirectory inDomain:NSUserDomainMask appropriateForURL:nil create:YES error:&err];
     // 都取到了，就合并
-    NSLog(@"开始合并");
+    NSLog(@"dacaiguoguo开始合并");
+
     NSURL *destDirectory = [docUrl URLByAppendingPathComponent:@"join"];
     if ([fileManager fileExistsAtPath:destDirectory.path isDirectory:nil]) {
         [fileManager removeItemAtURL:destDirectory error:&err];
@@ -158,7 +162,7 @@
     _assetExport.outputURL = outputFileUrl;
     [_assetExport exportAsynchronouslyWithCompletionHandler:^{
         AVAssetExportSessionStatus  status = _assetExport.status;
-        NSLog(@"exportAsynchronouslyWithCompletionHandler: %li\n", (long)status);
+        NSLog(@"dacaiguoguo: %li\n", (long)status);
         if (status == AVAssetExportSessionStatusCompleted) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 //如果想分享图片 就把图片添加进去 文字什么的同上
@@ -171,7 +175,9 @@
                   UIActivityTypePrint,UIActivityTypeAddToReadingList,UIActivityTypeOpenInIBooks,
                   UIActivityTypeCopyToPasteboard,UIActivityTypeAssignToContact];
 
-                [self presentViewController:activityVC animated:YES completion:nil];
+                [self presentViewController:activityVC animated:YES completion:^{
+                    [self.loadingView stopAnimating];
+                }];
                 // 分享之后的回调
                 activityVC.completionWithItemsHandler = ^(UIActivityType  _Nullable activityType, BOOL completed, NSArray * _Nullable returnedItems, NSError * _Nullable activityError) {
                     if (completed) {
